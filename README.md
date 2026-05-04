@@ -1,6 +1,7 @@
 # 🚨 Smart Disaster Response MIS
 
-A full-stack enterprise-grade Management Information System for national disaster response coordination. Built with **Node.js + Express**, **PostgreSQL**, and **React**.
+A full-stack enterprise-grade Management Information System for national disaster response coordination.
+Built with **Node.js + Express**, **Microsoft SQL Server**, and **React**.
 
 ---
 
@@ -39,14 +40,14 @@ This system manages disaster response operations including:
 
 ## Tech Stack
 
-| Layer      | Technology              |
-|------------|-------------------------|
+| Layer      | Technology                                     |
+|------------|------------------------------------------------|
 | Frontend   | React 18, React Router, Recharts, Lucide Icons |
-| Backend    | Node.js, Express.js     |
-| Database   | PostgreSQL 15+          |
-| Auth       | JWT (JSON Web Tokens), bcryptjs |
-| API Client | Axios                   |
-| Dev Tools  | Nodemon, Postman        |
+| Backend    | Node.js v22, Express.js                        |
+| Database   | Microsoft SQL Server Express                   |
+| DB Driver  | mssql (tedious)                                |
+| Auth       | JWT (jsonwebtoken), bcryptjs                   |
+| Dev Tools  | Nodemon, Postman, SSMS                         |
 
 ---
 
@@ -56,9 +57,10 @@ This system manages disaster response operations including:
 Browser (localhost:3000)
         ↕  HTTP / REST API
 Express Backend (localhost:5000)
-        ↕  SQL queries (pg pool)
-PostgreSQL Database (localhost:5432)
-        ↕  disaster_mis database
+        ↕  mssql driver (TCP/IP port 1433)
+SQL Server (localhost\SQLEXPRESS)
+        ↕
+disaster_mis database
 ```
 
 ---
@@ -70,66 +72,84 @@ Make sure the following are installed on your machine:
 | Tool | Version | Download |
 |------|---------|----------|
 | Node.js | v18+ | https://nodejs.org |
-| PostgreSQL | v15+ | https://www.postgresql.org/download |
-| pgAdmin 4 | Latest | https://www.pgadmin.org/download |
+| SQL Server Express | 2019 / 2022 | https://www.microsoft.com/en-us/sql-server/sql-server-downloads |
+| SSMS | Latest | https://aka.ms/ssmsfullsetup |
 | Postman | Latest | https://www.postman.com/downloads |
 | Git | Latest | https://git-scm.com |
 
-Verify installations:
+Verify Node.js installation:
 ```bash
-node -v        # should show v18.x or higher
-npm -v         # should show 9.x or higher
-psql --version # should show PostgreSQL 15.x or higher
+node -v    # should show v18.x or higher
+npm -v     # should show 9.x or higher
 ```
 
 ---
 
 ## Database Setup
 
-### Step 1 — Create the database
+### Step 1 — Enable TCP/IP in SQL Server
 
-Open **Command Prompt** and run:
+Node.js connects to SQL Server over TCP/IP. This must be enabled first.
 
-```bash
-psql -U postgres
+1. Open **SQL Server Configuration Manager**
+2. Expand **SQL Server Network Configuration**
+3. Click **Protocols for SQLEXPRESS**
+4. Right-click **TCP/IP** → **Enable**
+5. Right-click **TCP/IP** → **Properties** → click **IP Addresses** tab
+6. Scroll to the bottom → find **IPAll**
+7. Clear **TCP Dynamic Ports** field (delete any number there)
+8. Set **TCP Port** to `1433`
+9. Click **OK**
+10. Go to **SQL Server Services**
+11. Right-click **SQL Server (SQLEXPRESS)** → **Restart**
+
+### Step 2 — Run the SQL script in SSMS
+
+1. Open **SSMS**
+2. Connect using:
+   - Server name: `localhost\SQLEXPRESS`
+   - Authentication: **Windows Authentication**
+3. Go to **File → Open → disaster_mis_sqlserver_fixed.sql**
+4. Press **F5** to run the entire script
+
+You should see these messages in the output panel:
 ```
-
-Enter your PostgreSQL password when prompted, then run:
-
-```sql
-CREATE DATABASE disaster_mis;
-\q
-```
-
-### Step 2 — Run the SQL script
-
-```bash
-psql -U postgres -d disaster_mis -f "path\to\disaster_mis_complete.sql"
-```
-
-Replace `path\to\` with the actual path where `disaster_mis_complete.sql` is saved.
-
-**Example on Windows:**
-```bash
-psql -U postgres -d disaster_mis -f "C:\Users\DELL\Documents\disaster_mis\disaster_mis_complete.sql"
+All tables created successfully.
+All indexes created successfully.
+All views created successfully.
+All triggers created successfully.
+All sample data inserted successfully.
+Transaction 1: Resource allocation committed.
+Transaction 2: Team assigned successfully.
+Transaction 3: Expense approved and logged.
+Transaction 4: Patient admitted, bed decremented.
+Transaction 5 rolled back (expected): Insufficient stock...
+All scripts executed successfully!
 ```
 
 ### Step 3 — Set user passwords
 
-The SQL script inserts placeholder password hashes. Run this to set real bcrypt passwords:
+The SQL script inserts placeholder password hashes. Set real bcrypt passwords using this two-step process:
 
-```bash
-cd backend
-node -e "const b = require('bcryptjs'); const { Pool } = require('pg'); const pool = new Pool({ host:'localhost', port:5432, database:'disaster_mis', user:'postgres', password:'postgres' }); b.hash('Admin@123', 10).then(hash => { pool.query('UPDATE users SET password_hash = $1', [hash]).then(() => { console.log('Done! All users password set to Admin@123'); pool.end(); }); });"
+**Step 3a** — Generate a bcrypt hash. Run this in Command Prompt inside the `backend` folder:
+```cmd
+node -e "const b=require('bcryptjs');b.hash('Admin@123',10).then(h=>console.log(h));"
 ```
 
-> **Note:** All 10 users will have the password `Admin@123` after this command.
+Copy the printed hash (starts with `$2b$10$...`).
 
-### Step 4 — Verify data in pgAdmin
+**Step 3b** — Run this in SSMS Query Tool (paste your actual hash):
+```sql
+USE disaster_mis;
+UPDATE users SET password_hash = '$2b$10$PASTE_YOUR_HASH_HERE';
+GO
+```
 
-Open pgAdmin 4 → expand `disaster_mis` → **Schemas → public → Tables**
+> **Note:** All 10 users will have the password `Admin@123` after this.
 
-Right-click `users` → **View/Edit Data → All Rows**
+### Step 4 — Verify data in SSMS
+
+Expand `disaster_mis` → **Tables** → right-click `users` → **Select Top 1000 Rows**
 
 You should see 10 users with their roles.
 
@@ -139,27 +159,27 @@ You should see 10 users with their roles.
 
 ### Step 1 — Navigate to backend folder
 
-```bash
-cd disaster_mis/backend
+```cmd
+cd disaster_mis\backend
 ```
 
 ### Step 2 — Install dependencies
 
-```bash
+```cmd
 npm install
 ```
 
 ### Step 3 — Configure environment variables
 
-Create a `.env` file in the `backend` folder with this content:
+Open the `.env` file in the `backend` folder and make sure it contains:
 
 ```env
 # Database
-DB_HOST=localhost
-DB_PORT=5432
+DB_HOST=localhost\SQLEXPRESS
+DB_PORT=1433
 DB_NAME=disaster_mis
-DB_USER=postgres
-DB_PASSWORD=postgres
+DB_USER=
+DB_PASSWORD=
 
 # JWT
 JWT_SECRET=disaster_mis_super_secret_key_change_in_production
@@ -170,28 +190,30 @@ PORT=5000
 NODE_ENV=development
 ```
 
-> ⚠️ Change `DB_PASSWORD` to your actual PostgreSQL password.
-> ⚠️ Never push `.env` to GitHub — it is in `.gitignore`.
+> **Note:** `DB_USER` and `DB_PASSWORD` are left empty because we use Windows Authentication.
+> Windows Authentication uses your current Windows login — no username or password needed.
+> Never push `.env` to GitHub — it is in `.gitignore`.
 
 ### Step 4 — Start the backend
 
-```bash
+```cmd
 npm run dev
 ```
 
 You should see:
 ```
+[nodemon] starting `node server.js`
 Server running on http://localhost:5000
-Connected to PostgreSQL database
+Connected to SQL Server database
 ```
 
 ---
 
 ## Frontend Setup
 
-### Step 1 — Create React app
+### Step 1 — Create the React app
 
-```bash
+```cmd
 cd disaster_mis
 npx create-react-app frontend
 cd frontend
@@ -199,13 +221,13 @@ cd frontend
 
 ### Step 2 — Install dependencies
 
-```bash
+```cmd
 npm install axios react-router-dom recharts react-hot-toast lucide-react
 ```
 
-### Step 3 — Replace the src folder
+### Step 3 — Add the source files
 
-Extract the frontend zip file provided. Copy all files from `disaster-mis/frontend/src/` into your `frontend/src/` folder, replacing all existing files.
+Copy all files from the provided `frontend/src/` folder into your `frontend/src/` directory.
 
 Your `frontend/src/` should contain:
 
@@ -241,22 +263,21 @@ You need **two terminals** running simultaneously.
 
 ### Terminal 1 — Start Backend
 
-```bash
-cd disaster_mis/backend
+```cmd
+cd disaster_mis\backend
 npm run dev
 ```
 
 Expected output:
 ```
-[nodemon] starting `node server.js`
 Server running on http://localhost:5000
-Connected to PostgreSQL database
+Connected to SQL Server database
 ```
 
 ### Terminal 2 — Start Frontend
 
-```bash
-cd disaster_mis/frontend
+```cmd
+cd disaster_mis\frontend
 npm start
 ```
 
@@ -285,7 +306,7 @@ Password: Admin@123
 ### Setup
 
 1. Download and install Postman from https://www.postman.com/downloads
-2. Open Postman and skip onboarding (click Skip or get started)
+2. Open Postman and skip the onboarding screens
 3. Press `Ctrl + T` to open a new request tab
 
 ### Step 1 — Login to get token
@@ -295,9 +316,9 @@ Method: POST
 URL:    http://localhost:5000/api/auth/login
 ```
 
-Click **Body** → **raw** → select **JSON** from dropdown
+Click **Body** → **raw** → select **JSON** from the dropdown
 
-Paste:
+Paste this:
 ```json
 {
     "username": "admin_user",
@@ -307,15 +328,15 @@ Paste:
 
 Click **Send**. Copy the `token` value from the response.
 
-### Step 2 — Add token to requests
+### Step 2 — Add token to protected requests
 
 For all protected routes:
 
-1. Click the **Authorization** tab
+1. Click the **Authorization** tab (below the URL bar)
 2. Select **Bearer Token** from the Type dropdown
 3. Paste your token in the Token field
 
-### Step 3 — Test endpoints
+### Step 3 — Test example endpoints
 
 **Get all reports:**
 ```
@@ -324,17 +345,17 @@ URL:    http://localhost:5000/api/reports
 Auth:   Bearer <your_token>
 ```
 
-**Create a report:**
+**Create a new report:**
 ```
 Method: POST
 URL:    http://localhost:5000/api/reports
 Auth:   Bearer <your_token>
-Body (JSON):
+Body (raw JSON):
 {
     "location": "Lahore, Punjab",
     "disaster_type": "Flood",
     "severity_level": "Critical",
-    "description": "Test report"
+    "description": "Severe flooding in residential area"
 }
 ```
 
@@ -345,7 +366,21 @@ URL:    http://localhost:5000/api/financial/summary
 Auth:   Bearer <your_token>
 ```
 
-> ⚠️ Important: The browser URL bar always sends GET requests. Use Postman for POST, PUT, DELETE requests.
+**Assign a rescue team:**
+```
+Method: POST
+URL:    http://localhost:5000/api/teams/assign
+Auth:   Bearer <your_token>
+Body (raw JSON):
+{
+    "report_id": 1,
+    "team_id": 1
+}
+```
+
+> ⚠️ **Important:** The browser URL bar always sends GET requests.
+> Typing a URL in the browser will show "Cannot GET" for POST endpoints — this is normal.
+> Always use Postman for POST, PUT, and DELETE requests.
 
 ---
 
@@ -353,16 +388,16 @@ Auth:   Bearer <your_token>
 
 All users have the same password: **Admin@123**
 
-| Username | Role | Access |
-|----------|------|--------|
-| admin_user | Administrator | Full access — all pages |
-| kamran_admin | Administrator | Full access — all pages |
+| Username | Role | Access Level |
+|----------|------|--------------|
+| admin_user | Administrator | Full access — all pages and operations |
+| kamran_admin | Administrator | Full access — all pages and operations |
 | ali_operator | Emergency Operator | Reports, teams, resources, hospitals, approvals |
 | sara_operator | Emergency Operator | Reports, teams, resources, hospitals, approvals |
-| omar_field | Field Officer | View reports, update team status |
-| hina_field | Field Officer | View reports, update team status |
-| zain_warehouse | Warehouse Manager | Resources, warehouses, allocations, approvals |
-| nadia_warehouse | Warehouse Manager | Resources, warehouses, allocations, approvals |
+| omar_field | Field Officer | View reports, update team assignment status |
+| hina_field | Field Officer | View reports, update team assignment status |
+| zain_warehouse | Warehouse Manager | Resources, warehouses, allocation approvals |
+| nadia_warehouse | Warehouse Manager | Resources, warehouses, allocation approvals |
 | bilal_finance | Finance Officer | Donations, expenses, financial summary |
 | ayesha_finance | Finance Officer | Donations, expenses, financial summary |
 
@@ -370,96 +405,96 @@ All users have the same password: **Admin@123**
 
 ## API Endpoints Reference
 
-### Auth
+### Authentication
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | /api/auth/login | No | Login and get JWT token |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| POST | /api/auth/login | No | Login and receive JWT token |
 | POST | /api/auth/logout | Yes | Logout and log action |
 | GET | /api/auth/me | Yes | Get current user info |
-| GET | /api/auth/users | Admin | Get all users |
-| POST | /api/auth/register | Admin | Create new user |
+| GET | /api/auth/users | Admin only | Get all system users |
+| POST | /api/auth/register | Admin only | Create new user |
 
 ### Emergency Reports
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/reports | Yes | Get all reports (filterable) |
-| GET | /api/reports/:id | Yes | Get single report |
-| POST | /api/reports | Operator+ | Create new report |
-| PUT | /api/reports/:id | Operator+ | Update report status |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/reports | Yes | Get all reports (supports filters) |
+| GET | /api/reports/:id | Yes | Get single report by ID |
+| POST | /api/reports | Admin, Operator | Submit new emergency report |
+| PUT | /api/reports/:id | Admin, Operator, Field | Update report status |
 | GET | /api/reports/stats/summary | Yes | Dashboard statistics |
 
 ### Rescue Teams
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
 | GET | /api/teams | Yes | Get all teams |
 | GET | /api/teams/:id | Yes | Get single team |
-| POST | /api/teams | Admin | Create team |
-| PUT | /api/teams/:id | Admin/Field | Update team |
-| POST | /api/teams/assign | Operator+ | Assign team to report |
-| PUT | /api/teams/assignments/:id/complete | Operator+ | Complete assignment |
+| POST | /api/teams | Admin | Create new team |
+| PUT | /api/teams/:id | Admin, Field | Update team details |
+| POST | /api/teams/assign | Admin, Operator | Assign team to report |
+| PUT | /api/teams/assignments/:id/complete | Admin, Operator, Field | Mark assignment complete |
 | GET | /api/teams/:id/assignments | Yes | Team assignment history |
 
 ### Resources & Warehouses
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
 | GET | /api/resources | Yes | Get all resources |
 | GET | /api/resources/:id | Yes | Get single resource |
-| POST | /api/resources | Warehouse+ | Create resource |
-| PUT | /api/resources/:id | Warehouse+ | Update resource |
-| GET | /api/resources/stock/summary | Yes | Stock by type |
+| POST | /api/resources | Admin, Warehouse | Create new resource |
+| PUT | /api/resources/:id | Admin, Warehouse | Update resource |
+| GET | /api/resources/stock/summary | Yes | Stock summary by type |
 | GET | /api/resources/warehouses | Yes | Get all warehouses |
-| POST | /api/resources/warehouses | Warehouse+ | Create warehouse |
+| POST | /api/resources/warehouses | Admin, Warehouse | Create new warehouse |
 
 ### Resource Allocations
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
 | GET | /api/allocations | Yes | Get all allocations |
-| POST | /api/allocations | Operator+ | Request allocation |
-| PUT | /api/allocations/:id/approve | Warehouse+ | Approve + deduct stock |
-| PUT | /api/allocations/:id/reject | Warehouse+ | Reject allocation |
+| POST | /api/allocations | Admin, Operator, Warehouse | Request resource allocation |
+| PUT | /api/allocations/:id/approve | Admin, Warehouse | Approve and deduct stock |
+| PUT | /api/allocations/:id/reject | Admin, Warehouse | Reject allocation |
 
 ### Hospitals & Patients
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/hospitals/hospitals | Yes | Get all hospitals |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/hospitals/hospitals | Yes | Get all hospitals with capacity |
 | GET | /api/hospitals/hospitals/:id | Yes | Get single hospital |
-| POST | /api/hospitals/hospitals | Admin | Create hospital |
-| PUT | /api/hospitals/hospitals/:id | Admin | Update hospital |
+| POST | /api/hospitals/hospitals | Admin | Add new hospital |
+| PUT | /api/hospitals/hospitals/:id | Admin | Update hospital details |
 | GET | /api/hospitals/patients | Yes | Get all patients |
-| POST | /api/hospitals/patients | Operator+ | Admit patient |
-| PUT | /api/hospitals/patients/:id | Operator+ | Update patient status |
+| POST | /api/hospitals/patients | Admin, Operator | Admit new patient |
+| PUT | /api/hospitals/patients/:id | Admin, Operator | Update patient status |
 
-### Financial
+### Financial Management
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/financial/summary | Finance+ | Financial overview |
-| GET | /api/financial/donations | Finance+ | All donations |
-| POST | /api/financial/donations | Finance+ | Record donation |
-| GET | /api/financial/expenses | Finance+ | All expenses |
-| POST | /api/financial/expenses | Finance+ | Record expense |
-| PUT | /api/financial/expenses/:id/approve | Admin | Approve expense |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/financial/summary | Admin, Finance | Financial overview with charts data |
+| GET | /api/financial/donations | Admin, Finance | Get all donations |
+| POST | /api/financial/donations | Admin, Finance | Record new donation |
+| GET | /api/financial/expenses | Admin, Finance | Get all expenses |
+| POST | /api/financial/expenses | Admin, Finance | Record new expense |
+| PUT | /api/financial/expenses/:id/approve | Admin | Approve pending expense |
 
 ### Approvals
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/approvals | Yes | Get all requests |
-| POST | /api/approvals | Yes | Create request |
-| PUT | /api/approvals/:id/action | Admin/Finance/Warehouse | Approve or reject |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/approvals | Yes | Get all approval requests |
+| POST | /api/approvals | Yes | Create new approval request |
+| PUT | /api/approvals/:id/action | Admin, Warehouse, Finance | Approve or reject request |
 
 ### Audit Logs
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | /api/audit | Admin | Get all audit logs |
-| GET | /api/audit/summary | Admin | Audit summary stats |
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/audit | Admin only | Get all audit logs (latest 500) |
+| GET | /api/audit/summary | Admin only | Audit summary by action type |
 
 ---
 
@@ -469,10 +504,10 @@ All users have the same password: **Admin@123**
 disaster_mis/
 ├── backend/
 │   ├── config/
-│   │   └── db.js                  # PostgreSQL connection pool
+│   │   └── db.js                    # SQL Server connection pool (mssql)
 │   ├── middleware/
-│   │   ├── auth.js                # JWT verification
-│   │   └── rbac.js                # Role-based access control
+│   │   ├── auth.js                  # JWT token verification
+│   │   └── rbac.js                  # Role-based access control
 │   ├── routes/
 │   │   ├── auth.routes.js
 │   │   ├── reports.routes.js
@@ -493,25 +528,25 @@ disaster_mis/
 │   │   ├── financial.controller.js
 │   │   ├── approvals.controller.js
 │   │   └── audit.controller.js
-│   ├── .env                       # Environment variables (not in git)
-│   ├── .env.example               # Template for .env
+│   ├── .env                         # Environment variables (not in git)
+│   ├── .env.example                 # Template for .env
 │   ├── .gitignore
 │   ├── package.json
-│   └── server.js                  # Entry point
+│   └── server.js                    # Entry point
 │
 ├── frontend/
 │   ├── public/
 │   └── src/
 │       ├── api/
-│       │   └── axios.js           # Axios instance + interceptors
+│       │   └── axios.js             # Axios instance with interceptors
 │       ├── context/
-│       │   └── AuthContext.js     # Auth state management
+│       │   └── AuthContext.js       # Auth state management
 │       ├── components/
 │       │   └── common/
-│       │       └── Layout.js      # Sidebar navigation
+│       │       └── Layout.js        # Sidebar navigation
 │       ├── pages/
 │       │   ├── Login.js
-│       │   ├── Dashboard.js       # Charts and stats
+│       │   ├── Dashboard.js         # Charts and statistics
 │       │   ├── Reports.js
 │       │   ├── Teams.js
 │       │   ├── Resources.js
@@ -519,112 +554,122 @@ disaster_mis/
 │       │   ├── Financial.js
 │       │   ├── Approvals.js
 │       │   └── Audit.js
-│       ├── App.js                 # Router setup
+│       ├── App.js                   # Router setup
 │       ├── index.js
-│       └── index.css              # Global design system
+│       └── index.css                # Global design system
 │
-└── disaster_mis_complete.sql      # Full database script
+└── disaster_mis_sqlserver_fixed.sql # Complete SQL Server database script
 ```
 
 ---
 
 ## Features
 
-### Database (PostgreSQL)
-- 14 normalized tables (3NF)
-- 8 triggers for automation (stock deduction, team status, audit logging, bed count)
-- 6 role-specific views
-- 20 indexes (single-column + composite) for performance
-- ACID transactions for all multi-step operations
-- Full audit trail
+### Database (SQL Server)
+- 14 normalized tables in 3NF
+- 8 triggers using INSERTED/DELETED tables for automation
+- 6 role-specific views with ISNULL null-safe arithmetic
+- 24 indexes (14 clustered PKs + non-clustered + composite)
+- ACID transactions using BEGIN TRANSACTION / TRY...CATCH / ROLLBACK
+- Full audit trail with automatic logging via triggers
 
 ### Backend (Node.js + Express)
-- JWT authentication with 24h expiry
-- Role-based access control middleware
-- 9 route modules with full CRUD
-- Transaction handling with BEGIN/COMMIT/ROLLBACK
-- Input validation and error handling
-- Concurrency-safe stock deduction (row-level locking)
+- JWT authentication with 24-hour expiry
+- Role-based access control middleware (5 roles)
+- 9 route modules with full CRUD operations
+- Parameterized queries using mssql pool.request().input()
+- Windows Authentication — no username/password needed
+- Input validation and error handling on all endpoints
 
 ### Frontend (React)
 - Dark-themed professional UI
-- Role-based navigation (menus hide based on user role)
-- Live charts (bar charts, pie charts) using Recharts
+- Role-based navigation (sidebar hides pages based on user role)
+- Live charts using Recharts (bar, pie charts)
 - All data loaded from real API — no hardcoded values
 - Toast notifications for success and error feedback
 - Modal forms for create operations
-- Filter and search on all tables
-- Responsive layout with collapsible sidebar
+- Filter and search on all data tables
+- Collapsible sidebar layout
 
 ---
 
 ## Troubleshooting
 
-### "Cannot connect to database"
-- Check `DB_PASSWORD` in `.env` matches your PostgreSQL password
-- Make sure PostgreSQL service is running
-- Verify database name: `psql -U postgres -l` to list databases
+### "Failed to connect to localhost:1433"
+TCP/IP is not enabled or SQL Server is not running.
+- Follow Database Setup Step 1 to enable TCP/IP
+- Open Windows Services → check SQL Server (SQLEXPRESS) is Running
+- In SQL Server Configuration Manager → SQL Server Services → restart SQL Server
 
-### "Invalid username or password" on login
-- Run the password reset command in the Database Setup Step 3
-- Make sure you ran the SQL script first to insert users
+### "Cannot connect to database" on backend start
+- Check `.env` file — `DB_HOST` must be `localhost\SQLEXPRESS` (single backslash)
+- Make sure TCP/IP is enabled and SQL Server restarted
+- Make sure the `disaster_mis` database exists in SSMS
 
 ### "Cannot GET /api/auth/login" in browser
-- This is normal — login is a POST request
-- Use Postman to test POST endpoints
+This is completely normal. Login is a POST request. The browser only sends GET requests.
+Use Postman with method set to POST.
+
+### "Invalid username or password" on login
+The password hash was not updated. Run the two steps in Database Setup Step 3.
 
 ### Frontend shows blank page
-- Check both backend (port 5000) and frontend (port 3000) are running
+- Make sure both servers are running (port 5000 and port 3000)
 - Open browser console (F12) and check for errors
-- Make sure `src/` folder was replaced correctly
+- Make sure all src files are in the correct folder
 
-### CORS error in browser
-- Backend must be running on port 5000
-- Frontend must be running on port 3000
-- Do not change these ports without updating `server.js` CORS config
-
-### "Module not found" errors
-- Run `npm install` in both `backend/` and `frontend/` folders
+### "Index already exists" error when re-running SQL script
+The database already has data. Run this in SSMS first to reset everything:
+```sql
+USE master;
+DROP DATABASE IF EXISTS disaster_mis;
+CREATE DATABASE disaster_mis;
+USE disaster_mis;
+```
+Then re-run the full SQL script.
 
 ### Port already in use
-```bash
-# Kill process on port 5000 (Windows)
+```cmd
+:: Find and kill process on port 5000
 netstat -ano | findstr :5000
 taskkill /PID <PID_NUMBER> /F
 
-# Kill process on port 3000 (Windows)
+:: Find and kill process on port 3000
 netstat -ano | findstr :3000
 taskkill /PID <PID_NUMBER> /F
 ```
+
+### "Module not found" errors
+Run `npm install` in both `backend` and `frontend` folders.
 
 ---
 
 ## Quick Start Summary
 
-```bash
-# 1. Create database
-psql -U postgres -c "CREATE DATABASE disaster_mis;"
+```cmd
+:: 1. Enable TCP/IP in SQL Server Configuration Manager, restart SQL Server
 
-# 2. Run SQL script
-psql -U postgres -d disaster_mis -f disaster_mis_complete.sql
+:: 2. Open SSMS, connect to localhost\SQLEXPRESS with Windows Authentication
+::    Run disaster_mis_sqlserver_fixed.sql (press F5)
 
-# 3. Setup backend
-cd backend
+:: 3. Set passwords — run in backend folder:
+node -e "const b=require('bcryptjs');b.hash('Admin@123',10).then(h=>console.log(h));"
+::    Copy the hash and run in SSMS:
+::    USE disaster_mis; UPDATE users SET password_hash = 'paste_hash_here';
+
+:: 4. Start backend (Terminal 1)
+cd disaster_mis\backend
 npm install
-# Edit .env with your DB password
 npm run dev
 
-# 4. Set passwords (new terminal)
-node -e "const b=require('bcryptjs');const{Pool}=require('pg');const p=new Pool({host:'localhost',port:5432,database:'disaster_mis',user:'postgres',password:'postgres'});b.hash('Admin@123',10).then(h=>{p.query('UPDATE users SET password_hash=$1',[h]).then(()=>{console.log('Done');p.end()})});"
-
-# 5. Setup frontend (new terminal)
-cd ../frontend
+:: 5. Start frontend (Terminal 2)
+cd disaster_mis\frontend
 npm install
 npm start
 
-# 6. Open browser
-# http://localhost:3000
-# Login: admin_user / Admin@123
+:: 6. Open browser
+::    http://localhost:3000
+::    Login: admin_user / Admin@123
 ```
 
 ---

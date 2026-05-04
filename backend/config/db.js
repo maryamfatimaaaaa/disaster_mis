@@ -1,21 +1,22 @@
-const { Pool } = require('pg');
+const sql = require('mssql');
 
-const pool = new Pool({
-  host:     process.env.DB_HOST,
-  port:     process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  user:     process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-});
+const config = {
+  server:   'localhost\\SQLEXPRESS',
+  database: 'disaster_mis',
+  user:     'sa',
+  password: 'Admin@123',
+  options: {
+    trustServerCertificate: true,
+    encrypt:                false,
+  },
+  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 }
+};
 
-// Test connection on startup
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('Database connection failed:', err.message);
-  } else {
-    console.log('Connected to PostgreSQL database');
-    release();
-  }
-});
+const pool = new sql.ConnectionPool(config);
+const poolConnect = pool.connect();
 
-module.exports = pool;
+poolConnect
+  .then(() => console.log('Connected to SQL Server database'))
+  .catch(err => console.error('Database connection failed:', err.message));
+
+module.exports = { pool, poolConnect, sql };
